@@ -63,10 +63,14 @@ func deferInit() {
 func switchProxyMode() {
 	// Check for remote address
 	matched, _ := regexp.MatchString(`^https?://`, config.ImgPath)
-	proxyMode = false
+	proxyMode = config.Proxy.Enable
 	if matched {
+		// Enable proxy based on ImgPath should be deprecated in future versions
+		log.Warn("Enable proxy based on ImgPath will be deprecated in future versions. Use PROXY config options instead")
 		proxyMode = true
-	} else {
+	} 
+
+	if !proxyMode {
 		_, err := os.Stat(config.ImgPath)
 		if err != nil {
 			log.Fatalf("Your image path %s is incorrect.Please check and confirm.", config.ImgPath)

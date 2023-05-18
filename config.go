@@ -3,24 +3,36 @@ package main
 import "fmt"
 
 type Config struct {
-	Host              string   `json:"HOST"`
-	Port              string   `json:"PORT"`
-	ImgPath           string   `json:"IMG_PATH"`
-	Quality           int      `json:"QUALITY,string"`
-	AllowedTypes      []string `json:"ALLOWED_TYPES"`
-	ExhaustPath       string   `json:"EXHAUST_PATH"`
-	EnableAVIF        bool     `json:"ENABLE_AVIF"`
-	EnableExtraParams bool     `json:"ENABLE_EXTRA_PARAMS"`
+    Host                string              `json:"HOST"`
+    Port                string              `json:"PORT"`
+    ImgPath             string              `json:"IMG_PATH"`
+    Quality             int                 `json:"QUALITY,string"`
+    AllowedTypes        []string            `json:"ALLOWED_TYPES"`
+    ExhaustPath         string              `json:"EXHAUST_PATH"`
+    EnableAVIF          bool                `json:"ENABLE_AVIF"`
+    EnableExtraParams   bool                `json:"ENABLE_EXTRA_PARAMS"`
+    Proxy               Proxy                `json:"PROXY,omitempty"`
+}
+
+type Proxy struct {
+    Enable              bool                `json:"ENABLE"`
+    BackendUrl          string              `json:"BACKEND"`
+    HostMap             map[string]HostMap  `json:"HOST_MAP,omitempty"`
+}
+
+type HostMap struct {
+    BackendUrl          string              `json:"URL"`
+    Config              interface{}         `json:"CONFIG,omitempty"`
 }
 
 type ExtraParams struct {
-	Width  int // in px
-	Height int // in px
+    Width  int // in px
+    Height int // in px
 }
 
 // String : convert ExtraParams to string, used to generate cache path
 func (e *ExtraParams) String() string {
-	return fmt.Sprintf("_width=%d&height=%d", e.Width, e.Height)
+    return fmt.Sprintf("_width=%d&height=%d", e.Width, e.Height)
 }
 
 var (
@@ -35,7 +47,7 @@ var (
 )
 
 const (
-	sampleConfig = `
+    sampleConfig = `
 {
   "HOST": "127.0.0.1",
   "PORT": "3333",
@@ -44,10 +56,15 @@ const (
   "EXHAUST_PATH": "./exhaust",
   "ALLOWED_TYPES": ["jpg","png","jpeg","bmp"],
   "ENABLE_AVIF": false,
-  "ENABLE_EXTRA_PARAMS": false
+  "ENABLE_EXTRA_PARAMS": false,
+  "PROXY": {
+    "ENABLE": false,
+    "BACKEND": "http://www.example.com",
+    "HOST_MAP": {}
+  }
 }`
 
-	sampleSystemd = `
+    sampleSystemd = `
 [Unit]
 Description=WebP Server Go
 Documentation=https://github.com/webp-sh/webp_server_go
@@ -66,6 +83,6 @@ WantedBy=multi-user.target`
 )
 
 const (
-	webpMax = 16383
-	avifMax = 65536
+    webpMax = 16383
+    avifMax = 65536
 )

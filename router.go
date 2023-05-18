@@ -25,6 +25,7 @@ func convert(c *fiber.Ctx) error {
 	if err != nil {
 		log.Errorln(err)
 	}
+	reqHostname := c.Hostname()
 	reqURIwithQuery = u.RequestURI()
 	// delete ../ in reqURI to mitigate directory traversal
 	reqURI = path.Clean(reqURI)
@@ -54,7 +55,8 @@ func convert(c *fiber.Ctx) error {
 	} else {
 		rawImageAbs = path.Join(config.ImgPath, reqURI) // /home/xxx/mypic/123.jpg
 	}
-	log.Debugf("Incoming connection from %s %s", c.IP(), imgFilename)
+
+	log.Debugf("Incoming connection from %s %s %s", c.IP(), reqHostname, imgFilename)
 
 	if !checkAllowedType(imgFilename) {
 		msg := "File extension not allowed! " + imgFilename
@@ -67,7 +69,7 @@ func convert(c *fiber.Ctx) error {
 	goodFormat := guessSupportedFormat(&c.Request().Header)
 
 	if proxyMode {
-		rawImageAbs, _ = proxyHandler(c, reqURIwithQuery)
+		rawImageAbs, _ = proxyHandler(c, reqURIwithQuery, reqHostname)
 	}
 
 	log.Debugf("rawImageAbs=%s", rawImageAbs)
@@ -110,9 +112,17 @@ func convert(c *fiber.Ctx) error {
 	return c.SendFile(finalFileName)
 }
 
-func proxyHandler(c *fiber.Ctx, reqURIwithQuery string) (string, error) {
+func proxyHandler(c *fiber.Ctx, reqURIwithQuery string, reqHostname string) (string, error) {
+
+	backendUrl := config.Proxy.BackendUrl
+
 	// https://test.webp.sh/mypic/123.jpg?someother=200&somebugs=200
-	realRemoteAddr := config.ImgPath + reqURIwithQuery
+	realRemoteAddr := backendUrl + reqURIwithQuery
+
+	if v, found := config.Proxy.HostMap[reqHostname]; found {
+		log.Debugf("Found mapping %s to %s", backendUrl, v.BackendUrl)
+		realRemoteAddr = v.BackendUrl + reqURIwithQuery
+	}
 
 	// Ping Remote for status code and etag info
 	log.Infof("Remote Addr is %s, fetching info...", realRemoteAddr)
