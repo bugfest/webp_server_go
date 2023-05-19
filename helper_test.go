@@ -64,17 +64,16 @@ func TestGenOptimizedAbsPath(t *testing.T) {
 
 	rawImagePath := tempFile.Name()
 	exhaustPath := "/path/to/exhaust"
-	imageName := "tsuki.jpg"
-	reqURI := "/path/to/tsuki.jpg"
+	absImagePath := "/path/to/tsuki.jpg"
 	extraParams := ExtraParams{Width: 200, Height: 0}
 
 	// Test if config.EnableExtraParams is false
 	config.EnableExtraParams = false
 
-	avifAbsolutePath, webpAbsolutePath := genOptimizedAbsPath(rawImagePath, exhaustPath, imageName, reqURI, extraParams)
+	avifAbsolutePath, webpAbsolutePath := genOptimizedAbsPath(rawImagePath, exhaustPath, absImagePath, extraParams)
 
-	expectedAvifPath := path.Clean(path.Join(exhaustPath, path.Dir(reqURI), fmt.Sprintf("%s.%d.avif", imageName, modTime.Unix())))
-	expectedWebpPath := path.Clean(path.Join(exhaustPath, path.Dir(reqURI), fmt.Sprintf("%s.%d.webp", imageName, modTime.Unix())))
+	expectedAvifPath := path.Clean(path.Join(exhaustPath, fmt.Sprintf("%s.%d.avif", absImagePath, modTime.Unix())))
+	expectedWebpPath := path.Clean(path.Join(exhaustPath, fmt.Sprintf("%s.%d.webp", absImagePath, modTime.Unix())))
 
 	if avifAbsolutePath != expectedAvifPath {
 		t.Errorf("Avif absolute path is incorrect. Expected: %s, Got: %s", expectedAvifPath, avifAbsolutePath)
@@ -86,10 +85,10 @@ func TestGenOptimizedAbsPath(t *testing.T) {
 	// Test if config.EnableExtraParams is true and extraParams is not 0
 	config.EnableExtraParams = true
 
-	avifAbsolutePath, webpAbsolutePath = genOptimizedAbsPath(rawImagePath, exhaustPath, imageName, reqURI, extraParams)
+	avifAbsolutePath, webpAbsolutePath = genOptimizedAbsPath(rawImagePath, exhaustPath, absImagePath, extraParams)
 
-	expectedAvifPath = path.Clean(path.Join(exhaustPath, path.Dir(reqURI), fmt.Sprintf("%s.%d.avif_width=%d&height=%d", imageName, modTime.Unix(), extraParams.Width, extraParams.Height)))
-	expectedWebpPath = path.Clean(path.Join(exhaustPath, path.Dir(reqURI), fmt.Sprintf("%s.%d.webp_width=%d&height=%d", imageName, modTime.Unix(), extraParams.Width, extraParams.Height)))
+	expectedAvifPath = path.Clean(path.Join(exhaustPath, fmt.Sprintf("%s.%d.avif_width=%d&height=%d", absImagePath, modTime.Unix(), extraParams.Width, extraParams.Height)))
+	expectedWebpPath = path.Clean(path.Join(exhaustPath, fmt.Sprintf("%s.%d.webp_width=%d&height=%d", absImagePath, modTime.Unix(), extraParams.Width, extraParams.Height)))
 
 	if avifAbsolutePath != expectedAvifPath {
 		t.Errorf("Avif absolute path is incorrect. Expected: %s, Got: %s", expectedAvifPath, avifAbsolutePath)
@@ -102,10 +101,10 @@ func TestGenOptimizedAbsPath(t *testing.T) {
 	config.EnableExtraParams = true
 	extraParams = ExtraParams{Width: 200, Height: 0}
 
-	avifAbsolutePath, webpAbsolutePath = genOptimizedAbsPath(rawImagePath, exhaustPath, imageName, reqURI, extraParams)
+	avifAbsolutePath, webpAbsolutePath = genOptimizedAbsPath(rawImagePath, exhaustPath, absImagePath, extraParams)
 
-	expectedAvifPath = path.Clean(path.Join(exhaustPath, path.Dir(reqURI), fmt.Sprintf("%s.%d.avif_width=%d&height=%d", imageName, modTime.Unix(), extraParams.Width, extraParams.Height)))
-	expectedWebpPath = path.Clean(path.Join(exhaustPath, path.Dir(reqURI), fmt.Sprintf("%s.%d.webp_width=%d&height=%d", imageName, modTime.Unix(), extraParams.Width, extraParams.Height)))
+	expectedAvifPath = path.Clean(path.Join(exhaustPath, fmt.Sprintf("%s.%d.avif_width=%d&height=%d", absImagePath, modTime.Unix(), extraParams.Width, extraParams.Height)))
+	expectedWebpPath = path.Clean(path.Join(exhaustPath, fmt.Sprintf("%s.%d.webp_width=%d&height=%d", absImagePath, modTime.Unix(), extraParams.Width, extraParams.Height)))
 
 	if avifAbsolutePath != expectedAvifPath {
 		t.Errorf("Avif absolute path is incorrect. Expected: %s, Got: %s", expectedAvifPath, avifAbsolutePath)
