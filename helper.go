@@ -2,7 +2,7 @@ package main
 
 import (
 	"bytes"
-	"crypto/sha1" //#nosec
+	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
 	"net/http"
@@ -175,7 +175,7 @@ func cleanProxyCache(cacheImagePath string) {
 	}
 }
 
-func genOptimizedAbsPath(rawImagePath string, exhaustPath string, imageName string, reqURI string, extraParams ExtraParams) (string, string) {
+func genOptimizedAbsPath(rawImagePath string, exhaustPath string, imageName string, extraParams ExtraParams) (string, string) {
 	// get file mod time
 	STAT, err := os.Stat(rawImagePath)
 	if err != nil {
@@ -198,8 +198,8 @@ func genOptimizedAbsPath(rawImagePath string, exhaustPath string, imageName stri
 
 	// /home/webp_server/exhaust/path/to/tsuki.jpg.1582558990.webp
 	// Custom Exhaust: /path/to/exhaust/web_path/web_to/tsuki.jpg.1582558990.webp
-	webpAbsolutePath := path.Clean(path.Join(exhaustPath, path.Dir(reqURI), webpFilename))
-	avifAbsolutePath := path.Clean(path.Join(exhaustPath, path.Dir(reqURI), avifFilename))
+	webpAbsolutePath := path.Clean(path.Join(exhaustPath, webpFilename))
+	avifAbsolutePath := path.Clean(path.Join(exhaustPath, avifFilename))
 	return avifAbsolutePath, webpAbsolutePath
 }
 
@@ -271,9 +271,8 @@ func findSmallestFiles(files []string) string {
 	return final
 }
 
-func Sha1Path(uri string) string {
-	/* #nosec */
-	h := sha1.New()
+func HashPath(uri string) string {
+	h := sha256.New()
 	h.Write([]byte(uri))
 	return hex.EncodeToString(h.Sum(nil))
 }

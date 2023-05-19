@@ -5,7 +5,6 @@ import (
 	"os"
 	"path"
 	"path/filepath"
-	"strings"
 	"time"
 
 	"github.com/schollz/progressbar/v3"
@@ -33,8 +32,8 @@ func prefetchImages(confImgPath string, ExhaustPath string) {
 				return nil
 			}
 			// RawImagePath string, ImgFilename string, reqURI string
-			proposedURI := strings.Replace(picAbsPath, confImgPath, "", 1)
-			avif, webp := genOptimizedAbsPath(picAbsPath, ExhaustPath, info.Name(), proposedURI, ExtraParams{Width: 0, Height: 0})
+			// proposedURI := strings.Replace(picAbsPath, confImgPath, "", 1)
+			avif, webp := genOptimizedAbsPath(picAbsPath, ExhaustPath, info.Name(), ExtraParams{Width: 0, Height: 0})
 			_ = os.MkdirAll(path.Dir(avif), 0755)
 			log.Infof("Prefetching %s", picAbsPath)
 			go convertFilter(picAbsPath, avif, webp, ExtraParams{Width: 0, Height: 0}, finishChan)

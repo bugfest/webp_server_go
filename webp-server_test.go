@@ -58,15 +58,33 @@ func TestMainFunction(t *testing.T) {
 	assert.NotNil(t, conn)
 }
 
-func TestProxySwitch(t *testing.T) {
+func TestProxySwitchLegacy(t *testing.T) {
 	// real proxy mode
+	setupParam()
 	assert.False(t, proxyMode)
 	config.ImgPath = "https://z.cn"
 	switchProxyMode()
 	assert.True(t, proxyMode)
 
 	// normal
+	setupParam()
 	config.ImgPath = os.TempDir()
+	switchProxyMode()
+	assert.False(t, proxyMode)
+}
+
+func TestProxySwitch(t *testing.T) {
+	// real proxy mode
+	setupParam()
+	assert.False(t, proxyMode)
+	config.Proxy.BackendURL = "https://z.cn"
+	config.Proxy.Enable = true
+	switchProxyMode()
+	assert.True(t, proxyMode)
+
+	// normal
+	setupParam()
+	config.Proxy.Enable = false
 	switchProxyMode()
 	assert.False(t, proxyMode)
 }

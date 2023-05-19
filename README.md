@@ -67,14 +67,20 @@ The default `config.json` may look like this.
   "EXHAUST_PATH": "/path/to/exhaust",
   "ALLOWED_TYPES": ["jpg","png","jpeg","bmp"],
   "ENABLE_AVIF": false,
-  "ENABLE_EXTRA_PARAMS": false
+  "ENABLE_EXTRA_PARAMS": false,
+  "PROXY": {
+    "ENABLE": false,
+    "BACKEND": "http://www.example.com",
+    "HOST_MAP": {}
+  }
 }
 ```
 
 > `ENABLE_AVIF` means AVIF support, it's disabled by default as converting images to AVIF is CPU consuming.
 >
 > `ENABLE_EXTRA_PARAMS` means whether to enable Extra Parameters, basically it allows you to do some transform on images like `https://img.webp.sh/path/tsuki.jpg?width=20`, you can find more info on [Extra Parameters](https://docs.webp.sh/usage/extra-params/) page.
-
+>
+> `PROXY` options can be used to proxy requests to another web server. Set `PROXY.ENABLE` to `true` to enable it. `PROXY.HOST_MAP` can be used to route requests to different backends based on the received `Host` header.   
 
 #### Config Example
 

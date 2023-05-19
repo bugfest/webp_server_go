@@ -33,6 +33,15 @@ func TestMain(m *testing.M) {
 	remoteRaw = "remote-raw"
 	WriteLock = cache.New(5*time.Minute, 10*time.Minute)
 	m.Run()
+
+	config.Proxy.Enable = false
+}
+
+func setupParamProxy(BackendURL string) {
+	setupParam()
+	config.Proxy.Enable = true
+	config.Proxy.BackendURL = BackendURL
+	proxyMode = true
 }
 
 func requestToServer(url string, app *fiber.App, ua, accept string) (*http.Response, []byte) {
@@ -216,7 +225,7 @@ func TestConvertProxyModeWork(t *testing.T) {
 	var app = fiber.New()
 	app.Get("/*", convert)
 
-	config.ImgPath = "https://webp.sh"
+	setupParamProxy("https://webp.sh")
 	url := "https://webp.sh/images/cover.jpg"
 
 	resp, data := requestToServer(url, app, chromeUA, acceptWebP)

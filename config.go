@@ -16,12 +16,12 @@ type Config struct {
 
 type Proxy struct {
     Enable              bool                `json:"ENABLE"`
-    BackendUrl          string              `json:"BACKEND"`
+    BackendURL          string              `json:"BACKEND"`
     HostMap             map[string]HostMap  `json:"HOST_MAP,omitempty"`
 }
 
 type HostMap struct {
-    BackendUrl          string              `json:"URL"`
+    BackendURL          string              `json:"URL"`
     Config              interface{}         `json:"CONFIG,omitempty"`
 }
 
