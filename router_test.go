@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/gofiber/fiber/v2"
+	"github.com/gofiber/fiber/v2/middleware/etag"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -45,6 +46,9 @@ func requestToServer(url string, app *fiber.App, ua, accept string) (*http.Respo
 func TestServerHeaders(t *testing.T) {
 	setupParam()
 	var app = fiber.New()
+	app.Use(etag.New(etag.Config{
+		Weak: true,
+	}))
 	app.Get("/*", convert)
 	url := "http://127.0.0.1:3333/webp_server.bmp"
 

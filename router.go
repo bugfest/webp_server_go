@@ -1,8 +1,6 @@
 package main
 
 import (
-	"errors"
-	"fmt"
 	"net/http"
 	"net/url"
 
@@ -68,7 +66,7 @@ func convert(c *fiber.Ctx) error {
 	goodFormat := guessSupportedFormat(&c.Request().Header)
 
 	if proxyMode {
-		rawImageAbs, _ = proxyHandler(c, reqURIwithQuery)
+		_, rawImageAbs, _ = proxyHandler(c, reqURIwithQuery)
 	}
 
 	log.Debugf("rawImageAbs=%s", rawImageAbs)
@@ -107,39 +105,27 @@ func convert(c *fiber.Ctx) error {
 		c.Set("Content-Type", "image/avif")
 	}
 
-	etag := genEtag(finalFileName)
-	c.Set("ETag", etag)
+	// etag := genEtag(finalFileName)
+	// c.Set("ETag", etag)
 	c.Set("X-Compression-Rate", getCompressionRate(rawImageAbs, finalFileName))
 	return c.SendFile(finalFileName)
 }
 
-func proxyHandler(c *fiber.Ctx, reqURIwithQuery string) (string, error) {
+func proxyHandler(c *fiber.Ctx, reqURIwithQuery string) (bool, string, error) {
+
 	// https://test.webp.sh/mypic/123.jpg?someother=200&somebugs=200
 	realRemoteAddr := config.ImgPath + reqURIwithQuery
 
 	// Since we cannot store file in format of "mypic/123.jpg?someother=200&somebugs=200", we need to hash it.
 	reqURIwithQueryHash := Sha1Path(reqURIwithQuery) // 378e740ca56144b7587f3af9debeee544842879a
+	localRawImagePath := path.Join(remoteRaw, reqURIwithQueryHash) // To store the remote raw image, /home/webp_server/remote-raw/378e740ca56144b7587f3af9debeee544842879a
+	localRawMetaPath := path.Join(remoteRaw, reqURIwithQueryHash + ".meta") // To store the remote raw metadata, /home/webp_server/remote-raw/378e740ca56144b7587f3af9debeee544842879a.meta
 
-	localRawImagePath := path.Join(remoteRaw, reqURIwithQueryHash) // For store the remote raw image, /home/webp_server/remote-raw/378e740ca56144b7587f3af9debeee544842879a
-	// Ping Remote for status code and etag info
-	log.Infof("Remote Addr is %s, fetching...", realRemoteAddr)
-	statusCode, _, _ := getRemoteImageInfo(realRemoteAddr)
-
-	if statusCode == 200 {
-		if imageExists(localRawImagePath) {
-			return localRawImagePath, nil
-		} else {
-			// Temporary store of remote file.
-			cleanProxyCache(config.ExhaustPath + reqURIwithQuery + "*")
-			err := fetchRemoteImage(localRawImagePath, realRemoteAddr)
-			return localRawImagePath, err
-		}
-	} else {
-		msg := fmt.Sprintf("Remote returned %d status code!", statusCode)
-		_ = c.Send([]byte(msg))
-		log.Warn(msg)
-		_ = c.SendStatus(statusCode)
-		cleanProxyCache(config.ExhaustPath + reqURIwithQuery + "*")
-		return "", errors.New(msg)
+	// cleanProxyCache(config.ExhaustPath + reqURIwithQuery + "*")
+	refresh, err := fetchRemoteImage(localRawImagePath, realRemoteAddr, localRawMetaPath)
+	if err != nil {
+		_ = c.SendStatus(500)
+		return false, "", err
 	}
+	return refresh, localRawImagePath, err
 }
