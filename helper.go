@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"crypto/sha1" //#nosec
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"hash/crc32"
 	"io"
@@ -105,30 +106,111 @@ func getRemoteImageInfo(fileURL string) (int, string, string) {
 
 }
 
-func fetchRemoteImage(filepath string, url string) error {
-	resp, err := http.Get(url)
+type Meta map[string] string
+
+func loadMeta(metapath string) Meta {
+
+	var meta Meta
+
+	bytes, err := os.ReadFile(metapath)
 	if err != nil {
-		return err
+        log.Debugf("Unable to load meta file %s", metapath)
+        return nil
+    }
+
+    err = json.Unmarshal(bytes, &meta)
+	if err != nil {
+        log.Debugf("Unable to parse meta file %s", metapath)
+        return nil
+    }
+	return meta
+}
+
+func writeMeta(meta Meta, metapath string) error {
+
+	bytes, _ := json.MarshalIndent(meta, "", "  ")
+	err := os.WriteFile(metapath, bytes, 0600)
+
+	if err != nil {
+        log.Debugf("Unable to write meta file %s", metapath)
+        return err
+    }
+
+	return nil
+}
+
+func fetchRemoteImage(filepath string, url string, metafilepath string) (bool, error) {
+
+	fresh := false
+	
+	client := http.Client{}
+	req , err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		return fresh, err
+	}
+
+	meta := loadMeta(metafilepath)
+	etag, ok := meta["etag"]
+	if ok {
+		req.Header.Add("If-None-Match", etag)
+	} else {
+		etag = ""
+	}
+	
+	log.Infof("http.GET %s (If-None-Match=%s)", url, etag)
+	resp, err := client.Do(req)
+	if err != nil {
+		return fresh, err
 	}
 	defer resp.Body.Close()
+
+	if etag != "" && resp.StatusCode == 304 {
+		// Not modified
+		log.Debugf("Remote %s etag=%s 304", url, etag)
+		return fresh, nil
+	}
+
+	if resp.StatusCode != 200 {
+		log.Warnf("remote url %s responded status %d != 200", url, resp.StatusCode)
+		return fresh, fmt.Errorf("remote url %s responded status %d != 200", url, resp.StatusCode)
+	}
 
 	// Check if remote content-type is image
 	if !strings.Contains(resp.Header.Get("content-type"), "image") {
 		log.Warnf("remote file %s is not image, remote returned %s", url, resp.Header.Get("content-type"))
 		// Delete the file
 		_ = os.Remove(filepath)
-		return fmt.Errorf("remote file %s is not image, remote returned %s", url, resp.Header.Get("content-type"))
+		return fresh, fmt.Errorf("remote file %s is not image, remote returned %s", url, resp.Header.Get("content-type"))
 	}
 
 	_ = os.MkdirAll(path.Dir(filepath), 0755)
-	out, err := os.Create(filepath)
+
+	// Download to a temp file and them move (filesystem atomic operation)
+	out, err := os.CreateTemp("", "tmp-")
 	if err != nil {
-		return err
+		return fresh, err
 	}
 	defer out.Close()
 
 	_, err = io.Copy(out, resp.Body)
-	return err
+	if err != nil {
+		return fresh, err
+	}
+
+	// Rename and Remove a file
+	// If newpath already exists and is not a directory, Rename replaces it.
+    err = os.Rename(out.Name(), filepath)
+	fresh = true
+
+	// Update metadata file
+
+	var m = make(map[string]string)
+	m["etag"] = resp.Header.Get("Etag")
+	m["last-modified"] = resp.Header.Get("last-modified")
+	m["expires"] = resp.Header.Get("expires")
+	_ = writeMeta(m, metafilepath)
+
+    return fresh, err
 }
 
 // Given /path/to/node.png
