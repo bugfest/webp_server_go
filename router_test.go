@@ -29,6 +29,8 @@ func setupParam() {
 
 	proxyMode = false
 	remoteRaw = "remote-raw"
+
+	config.DBPath = "./db"
 }
 
 func requestToServer(url string, app *fiber.App, ua, accept string) (*http.Response, []byte) {
@@ -59,6 +61,8 @@ func TestServerHeaders(t *testing.T) {
 		Weak: true,
 	}))
 	app.Get("/*", convert)
+	db, _ = dbSetup()
+	defer db.Close()
 	url := "http://127.0.0.1:3333/webp_server.bmp"
 
 	// test for chrome
@@ -142,6 +146,9 @@ func TestConvert(t *testing.T) {
 	}
 
 	var app = fiber.New()
+	app.Use(etag.New(etag.Config{
+		Weak: true,
+	}))
 	app.Get("/*", convert)
 
 	// test Chrome
@@ -176,6 +183,9 @@ func TestConvertNotAllowed(t *testing.T) {
 	config.AllowedTypes = []string{"jpg", "png", "jpeg"}
 
 	var app = fiber.New()
+	app.Use(etag.New(etag.Config{
+		Weak: true,
+	}))
 	app.Get("/*", convert)
 
 	// not allowed, but we have the file, this should return File extension not allowed
@@ -197,6 +207,9 @@ func TestConvertProxyModeBad(t *testing.T) {
 	proxyMode = true
 
 	var app = fiber.New()
+	app.Use(etag.New(etag.Config{
+		Weak: true,
+	}))
 	app.Get("/*", convert)
 
 	// this is local random image, should be 404
@@ -217,6 +230,9 @@ func TestConvertProxyModeWork(t *testing.T) {
 	proxyMode = true
 
 	var app = fiber.New()
+	app.Use(etag.New(etag.Config{
+		Weak: true,
+	}))
 	app.Get("/*", convert)
 
 	config.ImgPath = "https://webp.sh"
@@ -239,6 +255,9 @@ func TestConvertBigger(t *testing.T) {
 	config.Quality = 100
 
 	var app = fiber.New()
+	app.Use(etag.New(etag.Config{
+		Weak: true,
+	}))
 	app.Get("/*", convert)
 
 	url := "http://127.0.0.1:3333/big.jpg"

@@ -12,12 +12,13 @@ import (
 	"os"
 	"path"
 	"path/filepath"
-
+	"time"
 	"github.com/h2non/filetype"
 
 	"github.com/valyala/fasthttp"
 
 	"strings"
+	badger "github.com/dgraph-io/badger/v3"
 
 	log "github.com/sirupsen/logrus"
 )
@@ -106,40 +107,62 @@ func getRemoteImageInfo(fileURL string) (int, string, string) {
 
 }
 
-type Meta map[string] string
-
-func loadMeta(metapath string) Meta {
-
-	var meta Meta
-
-	bytes, err := os.ReadFile(metapath)
-	if err != nil {
-        log.Debugf("Unable to load meta file %s", metapath)
-        return nil
-    }
-
-    err = json.Unmarshal(bytes, &meta)
-	if err != nil {
-        log.Debugf("Unable to parse meta file %s", metapath)
-        return nil
-    }
-	return meta
+type ImageMeta struct {
+	// id     string    `json:"ID"`
+	// ttl    int       `json:"TTL`
+	Etag      string    `json:"ETAG`
+	ModifiedEpoc  int64 `json:"MODIFIED_EPOC"`
+	ExpiresEpoc   int64 `json:"EXPIRES_EPOC"`
 }
 
-func writeMeta(meta Meta, metapath string) error {
+func loadMeta(id string) (ImageMeta, error) {
 
-	bytes, _ := json.MarshalIndent(meta, "", "  ")
-	err := os.WriteFile(metapath, bytes, 0600)
+	var meta ImageMeta
+
+	err := db.View(func(txn *badger.Txn) error {
+		item, err := txn.Get([]byte(id))
+		if err != nil {
+			return err
+		}
+	  
+		val, err := item.ValueCopy(nil)
+		if err != nil {
+			return nil
+		}
+
+		err = json.Unmarshal(val, &meta)
+		if err != nil {
+			log.Debugf("Unable to parse meta id %s", id)
+			return err
+		}
+		return err
+	})
 
 	if err != nil {
-        log.Debugf("Unable to write meta file %s", metapath)
+		log.Debugf("Meta key %s not found", id)
+	}
+
+	return meta, err
+}
+
+func writeMeta(id string, meta ImageMeta) error {
+
+	bytes, _ := json.MarshalIndent(meta, "", "  ")
+
+	err := db.Update(func(txn *badger.Txn) error {
+		err := txn.Set([]byte(id), bytes)
+		return err
+	})
+
+	if err != nil {
+        log.Debugf("Unable to write meta id %s", id)
         return err
     }
 
 	return nil
 }
 
-func fetchRemoteImage(filepath string, url string, metafilepath string) (bool, error) {
+func fetchRemoteImage(filepath string, url string, id string) (bool, error) {
 
 	fresh := false
 	
@@ -149,24 +172,21 @@ func fetchRemoteImage(filepath string, url string, metafilepath string) (bool, e
 		return fresh, err
 	}
 
-	meta := loadMeta(metafilepath)
-	etag, ok := meta["etag"]
-	if ok {
-		req.Header.Add("If-None-Match", etag)
-	} else {
-		etag = ""
+	meta, _ := loadMeta(id)
+	if meta.Etag != "" {
+		req.Header.Add("If-None-Match", meta.Etag)
 	}
-	
-	log.Infof("http.GET %s (If-None-Match=%s)", url, etag)
+
+	log.Infof("http.GET %s (If-None-Match=%s)", url, meta.Etag)
 	resp, err := client.Do(req)
 	if err != nil {
 		return fresh, err
 	}
 	defer resp.Body.Close()
 
-	if etag != "" && resp.StatusCode == 304 {
+	if meta.Etag != "" && resp.StatusCode == 304 {
 		// Not modified
-		log.Debugf("Remote %s etag=%s 304", url, etag)
+		log.Debugf("Remote %s etag=%s 304", url, meta.Etag)
 		return fresh, nil
 	}
 
@@ -202,15 +222,33 @@ func fetchRemoteImage(filepath string, url string, metafilepath string) (bool, e
     err = os.Rename(out.Name(), filepath)
 	fresh = true
 
-	// Update metadata file
-
-	var m = make(map[string]string)
-	m["etag"] = resp.Header.Get("Etag")
-	m["last-modified"] = resp.Header.Get("last-modified")
-	m["expires"] = resp.Header.Get("expires")
-	_ = writeMeta(m, metafilepath)
+	// Update metadata db key
+	m := imageMetaExtract(resp)
+	_ = writeMeta(id, m)
 
     return fresh, err
+}
+
+func imageMetaExtract(resp *http.Response) ImageMeta {
+	meta := ImageMeta{}
+
+	meta.Etag = resp.Header.Get("Etag")
+
+	if resp.Header.Get("Last-Modified") != "" {
+		modified, err := time.Parse(http.TimeFormat, resp.Header.Get("Last-Modified"))
+		if err == nil {
+			meta.ModifiedEpoc = modified.Unix()
+		}
+	} else {
+		meta.ModifiedEpoc = time.Now().Unix()
+	}
+
+	expires, err := time.Parse(http.TimeFormat, resp.Header.Get("Expires"))
+	if err == nil {
+		meta.ModifiedEpoc = expires.Unix()
+	}
+
+	return meta
 }
 
 // Given /path/to/node.png

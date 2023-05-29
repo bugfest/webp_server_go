@@ -4,6 +4,7 @@
   "QUALITY": "80",
   "IMG_PATH": "./pics",
   "EXHAUST_PATH": "./exhaust",
+  "DB_PATH": "./db",
   "ALLOWED_TYPES": ["jpg","png","jpeg","bmp"],
   "ENABLE_AVIF": false,
   "ENABLE_EXTRA_PARAMS": false

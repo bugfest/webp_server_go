@@ -21,4 +21,5 @@ COPY --from=builder /build/config.json /etc/config.json
 
 WORKDIR /opt
 VOLUME /opt/exhaust
+VOLUME /opt/db
 CMD ["/usr/bin/webp-server", "--config", "/etc/config.json"]

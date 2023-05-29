@@ -1,6 +1,8 @@
 package main
 
-import "fmt"
+import (
+	"fmt"
+)
 
 type Config struct {
 	Host              string   `json:"HOST"`
@@ -9,6 +11,7 @@ type Config struct {
 	Quality           int      `json:"QUALITY,string"`
 	AllowedTypes      []string `json:"ALLOWED_TYPES"`
 	ExhaustPath       string   `json:"EXHAUST_PATH"`
+	DBPath            string   `json:"DB_PATH"`
 	EnableAVIF        bool     `json:"ENABLE_AVIF"`
 	EnableExtraParams bool     `json:"ENABLE_EXTRA_PARAMS"`
 }
@@ -42,6 +45,7 @@ const (
   "QUALITY": "80",
   "IMG_PATH": "./pics",
   "EXHAUST_PATH": "./exhaust",
+  "DB_PATH": "./db",
   "ALLOWED_TYPES": ["jpg","png","jpeg","bmp"],
   "ENABLE_AVIF": false,
   "ENABLE_EXTRA_PARAMS": false

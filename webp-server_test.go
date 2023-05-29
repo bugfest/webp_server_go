@@ -36,7 +36,9 @@ func TestMainFunction(t *testing.T) {
 	// first test verbose mode
 	assert.False(t, verboseMode)
 	assert.Equal(t, log.GetLevel(), log.InfoLevel)
-	os.Args = append(os.Args, "-v", "-prefetch")
+	os.Args = []string{os.Args[0], "-v", "-prefetch"}
+
+	config.DBPath = "./db"
 
 	// run main function
 	go main()

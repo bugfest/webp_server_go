@@ -9,11 +9,14 @@ import (
 	"runtime"
 
 	"github.com/davidbyttow/govips/v2/vips"
+	badger "github.com/dgraph-io/badger/v3"
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/etag"
 	"github.com/gofiber/fiber/v2/middleware/logger"
 	log "github.com/sirupsen/logrus"
 )
+
+var db *badger.DB
 
 func loadConfig(path string) Config {
 	jsonObject, err := os.Open(path)
@@ -27,14 +30,18 @@ func loadConfig(path string) Config {
 }
 
 func deferInit() {
-	flag.StringVar(&configPath, "config", "config.json", "/path/to/config.json. (Default: ./config.json)")
-	flag.BoolVar(&prefetch, "prefetch", false, "Prefetch and convert image to webp")
-	flag.IntVar(&jobs, "jobs", runtime.NumCPU(), "Prefetch thread, default is all.")
-	flag.BoolVar(&dumpConfig, "dump-config", false, "Print sample config.json")
-	flag.BoolVar(&dumpSystemd, "dump-systemd", false, "Print sample systemd service file.")
-	flag.BoolVar(&verboseMode, "v", false, "Verbose, print out debug info.")
-	flag.BoolVar(&showVersion, "V", false, "Show version information.")
-	flag.Parse()
+	fs:=flag.NewFlagSet("webp-server", flag.ExitOnError)
+	fs.StringVar(&configPath, "config", "config.json", "/path/to/config.json. (Default: ./config.json)")
+	fs.BoolVar(&prefetch, "prefetch", false, "Prefetch and convert image to webp")
+	fs.IntVar(&jobs, "jobs", runtime.NumCPU(), "Prefetch thread, default is all.")
+	fs.BoolVar(&dumpConfig, "dump-config", false, "Print sample config.json")
+	fs.BoolVar(&dumpSystemd, "dump-systemd", false, "Print sample systemd service file.")
+	fs.BoolVar(&verboseMode, "v", false, "Verbose, print out debug info.")
+	fs.BoolVar(&showVersion, "V", false, "Show version information.")
+	err := fs.Parse(os.Args[1:])
+	if err != nil {
+		log.Error(err)
+	}
 	// Logrus
 	log.SetOutput(os.Stdout)
 	log.SetReportCaller(true)
@@ -70,6 +77,18 @@ func switchProxyMode() {
 	}
 }
 
+func dbSetup() (*badger.DB, error) {
+	opts := badger.DefaultOptions(config.DBPath)
+
+	// https://github.com/dgraph-io/badger/issues/1297#issuecomment-612941482
+	opts.NumVersionsToKeep = 0
+	opts.CompactL0OnClose = true                                                                                                                                                                                                                                                                                                              
+	opts.NumLevelZeroTables = 1
+	opts.NumLevelZeroTablesStall = 2
+	opts.ValueLogFileSize = 1024 * 1024 * 10
+	return badger.Open(opts)
+}
+
 func main() {
 	// Our banner
 	banner := fmt.Sprintf(`
@@ -79,7 +98,7 @@ func main() {
 ▘ ▘▝▀▘▀▀ ▘   ▝▀ ▝▀▘▘   ▘ ▝▀▘▘   ▝▀ ▝▀
 
 Webp Server Go - v%s
-Develop by WebP Server team. https://github.com/webp-sh`, version)
+Developed by WebP Server team. https://github.com/webp-sh`, version)
 
 	deferInit()
 	// process cli params
@@ -103,6 +122,12 @@ Develop by WebP Server team. https://github.com/webp-sh`, version)
 		ConcurrencyLevel: runtime.NumCPU(),
 	})
 	defer vips.Shutdown()
+
+	db, err := dbSetup()
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer db.Close()
 
 	if prefetch {
 		go prefetchImages(config.ImgPath, config.ExhaustPath)

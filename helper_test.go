@@ -198,6 +198,10 @@ func TestGetRemoteImageInfo(t *testing.T) {
 }
 
 func TestFetchRemoteImage(t *testing.T) {
+	setupParam()
+	db, _ = dbSetup()
+	defer db.Close()
+	
 	// test the normal one
 	fp := filepath.Join("./exhaust", "test.ico")
 
@@ -249,4 +253,25 @@ func TestGetCompressionRate(t *testing.T) {
 
 	ratio = getCompressionRate("pic1", pic2)
 	assert.Equal(t, "", ratio)
+}
+
+func TestMeta(t *testing.T) {
+	setupParam()
+	db, _ = dbSetup()
+	defer db.Close()
+
+	_, err := loadMeta("should-not-exist")
+	assert.Error(t, err)
+
+	meta1 := ImageMeta{Etag: "xxx", ModifiedEpoc: 1, ExpiresEpoc: 2}
+	err = writeMeta("mymeta-1", meta1)
+	assert.NoError(t, err)
+
+	meta1 = ImageMeta{Etag: "yyy", ModifiedEpoc: 2, ExpiresEpoc: 3}
+	err = writeMeta("mymeta-1", meta1)
+	assert.NoError(t, err)
+
+	meta1read, err := loadMeta("mymeta-1")
+	assert.NoError(t, err)
+	assert.Equal(t, meta1read, meta1)
 }

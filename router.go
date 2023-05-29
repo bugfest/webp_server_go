@@ -117,10 +117,9 @@ func proxyHandler(c *fiber.Ctx, reqURIwithQuery string) (bool, string, error) {
 	// Since we cannot store file in format of "mypic/123.jpg?someother=200&somebugs=200", we need to hash it.
 	reqURIwithQueryHash := Sha1Path(reqURIwithQuery) // 378e740ca56144b7587f3af9debeee544842879a
 	localRawImagePath := path.Join(remoteRaw, reqURIwithQueryHash) // To store the remote raw image, /home/webp_server/remote-raw/378e740ca56144b7587f3af9debeee544842879a
-	localRawMetaPath := path.Join(remoteRaw, reqURIwithQueryHash + ".meta") // To store the remote raw metadata, /home/webp_server/remote-raw/378e740ca56144b7587f3af9debeee544842879a.meta
 
 	// cleanProxyCache(config.ExhaustPath + reqURIwithQuery + "*")
-	refresh, err := fetchRemoteImage(localRawImagePath, realRemoteAddr, localRawMetaPath)
+	refresh, err := fetchRemoteImage(localRawImagePath, realRemoteAddr, reqURIwithQueryHash)
 	if err != nil {
 		_ = c.SendStatus(500)
 		return false, "", err

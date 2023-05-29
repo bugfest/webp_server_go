@@ -22,4 +22,5 @@ builds/
 /.idea/vcs.xml
 /.idea/webp_server_go.iml
 remote-raw/
+db/
 coverage.txt
