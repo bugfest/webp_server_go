@@ -3,7 +3,9 @@ module webp_server_go
 go 1.20
 
 require (
+	github.com/alitto/pond v1.8.3
 	github.com/davidbyttow/govips/v2 v2.13.0
+	github.com/emirpasic/gods v1.18.1
 	github.com/gofiber/fiber/v2 v2.4.0
 	github.com/h2non/filetype v1.1.3
 	github.com/patrickmn/go-cache v2.1.0+incompatible

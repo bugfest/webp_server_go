@@ -21,6 +21,7 @@ func TestLoadConfig(t *testing.T) {
 	assert.Equal(t, 80, c.Quality)
 	assert.Equal(t, "./pics", c.ImgPath)
 	assert.Equal(t, []string{"jpg", "png", "jpeg", "bmp"}, c.AllowedTypes)
+	assert.Equal(t, false, c.LazyMode)
 }
 
 func TestDeferInit(t *testing.T) {

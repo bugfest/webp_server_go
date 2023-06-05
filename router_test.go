@@ -28,6 +28,7 @@ func TestMain(m *testing.M) {
 	config.ImgPath = "./pics"
 	config.ExhaustPath = "./exhaust_test"
 	config.AllowedTypes = []string{"jpg", "png", "jpeg", "bmp"}
+	config.LazyMode = false
 
 	proxyMode = false
 	remoteRaw = "remote-raw"
@@ -56,12 +57,22 @@ func requestToServerHeaders(url string, app *fiber.App, headers map[string]strin
 }
 
 func TestServerHeaders(t *testing.T) {
+	ts := LazyModeSetup(t)
+	t.Cleanup(ts)
+
+	defer WorkerPool.StopAndWait()
+
 	var app = fiber.New()
 	app.Use(etag.New(etag.Config{
 		Weak: true,
 	}))
 	app.Get("/*", convert)
 	url := "http://127.0.0.1:3333/webp_server.bmp"
+
+	// warm up
+	resp, _ := requestToServer(url, app, chromeUA, acceptWebP)
+	defer resp.Body.Close()
+	WorkerPool.StopAndWait()
 
 	// test for chrome
 	response, _ := requestToServer(url, app, chromeUA, acceptWebP)
@@ -170,6 +181,91 @@ func TestConvert(t *testing.T) {
 		assert.NotNil(t, respType)
 		assert.Equal(t, respType, contentType)
 	}
+	config.EnableAVIF = false
+}
+
+func TestConvertLazy(t *testing.T) {
+	ts := LazyModeSetup(t)
+	t.Cleanup(ts)
+	
+	// TODO: old-style test, better update it with accept headers
+	var testChromeLink = map[string]string{
+		"http://127.0.0.1:3333/webp_server.jpg":                 "image/webp",
+		"http://127.0.0.1:3333/webp_server.bmp":                 "image/webp",
+		"http://127.0.0.1:3333/webp_server.png":                 "image/webp",
+		"http://127.0.0.1:3333/empty.jpg":                       "",
+		"http://127.0.0.1:3333/png.jpg":                         "image/webp",
+		"http://127.0.0.1:3333/12314.jpg":                       "",
+		"http://127.0.0.1:3333/dir1/inside.jpg":                 "image/webp",
+		"http://127.0.0.1:3333/%e5%a4%aa%e7%a5%9e%e5%95%a6.png": "image/webp",
+		"http://127.0.0.1:3333/太神啦.png":                         "image/webp",
+	}
+
+	var testChromeAvifLink = map[string]string{
+		"http://127.0.0.1:3333/webp_server.jpg":                 "image/avif",
+		"http://127.0.0.1:3333/webp_server.bmp":                 "image/avif",
+		"http://127.0.0.1:3333/webp_server.png":                 "image/avif",
+		"http://127.0.0.1:3333/empty.jpg":                       "",
+		"http://127.0.0.1:3333/png.jpg":                         "image/avif",
+		"http://127.0.0.1:3333/12314.jpg":                       "",
+		"http://127.0.0.1:3333/dir1/inside.jpg":                 "image/avif",
+		"http://127.0.0.1:3333/%e5%a4%aa%e7%a5%9e%e5%95%a6.png": "image/avif",
+		"http://127.0.0.1:3333/太神啦.png":                         "image/avif",
+	}
+
+	var testSafariLink = map[string]string{
+		"http://127.0.0.1:3333/webp_server.jpg": "image/jpeg",
+		"http://127.0.0.1:3333/webp_server.bmp": "image/bmp",
+		"http://127.0.0.1:3333/webp_server.png": "image/png",
+		"http://127.0.0.1:3333/empty.jpg":       "",
+		"http://127.0.0.1:3333/png.jpg":         "image/png",
+		"http://127.0.0.1:3333/12314.jpg":       "",
+		"http://127.0.0.1:3333/dir1/inside.jpg": "image/jpeg",
+	}
+
+	config.EnableAVIF = true
+	var app = fiber.New()
+	app.Get("/*", convert)
+
+	// Warm up optimized versions
+	for url := range testChromeLink {
+		resp, _ := requestToServer(url, app, chromeUA, acceptWebP)
+		defer resp.Body.Close()
+	}
+	for url := range testChromeAvifLink {
+		resp, _ := requestToServer(url, app, chromeUA, acceptWebP)
+		defer resp.Body.Close()
+	}
+	for url := range testSafariLink {
+		resp, _ := requestToServer(url, app, chromeUA, acceptWebP)
+		defer resp.Body.Close()
+	}
+	WorkerPool.StopAndWait()
+
+	// test Chrome
+	for url, respType := range testChromeLink {
+		resp, data := requestToServer(url, app, chromeUA, acceptWebP)
+		defer resp.Body.Close()
+		contentType := getFileContentType(data)
+		assert.Equal(t, respType, contentType)
+	}
+
+	// test Safari
+	for url, respType := range testSafariLink {
+		resp, data := requestToServer(url, app, safariUA, acceptLegacy)
+		defer resp.Body.Close()
+		contentType := getFileContentType(data)
+		assert.Equal(t, respType, contentType)
+	}
+
+	// test Avif is processed in proxy mode
+	for url, respType := range testChromeAvifLink {
+		resp, data := requestToServer(url, app, chromeUA, acceptAvif)
+		defer resp.Body.Close()
+		contentType := getFileContentType(data)
+		assert.NotNil(t, respType)
+		assert.Equal(t, respType, contentType)
+	}
 }
 
 func TestConvertNotAllowed(t *testing.T) {
@@ -231,6 +327,37 @@ func TestConvertProxyModeWork(t *testing.T) {
 	assert.Equal(t, "image/jpeg", getFileContentType(data))
 }
 
+func TestConvertProxyModeWorkLazy(t *testing.T) {
+	ts := LazyModeSetup(t)
+	t.Cleanup(ts)
+
+	assert.Equal(t, true, config.LazyMode)
+
+	proxyMode = true
+
+	var app = fiber.New()
+	app.Get("/*", convert)
+
+	config.ImgPath = "https://webp.sh"
+	url := "https://webp.sh/images/cover.jpg"
+
+	// Warm up
+	resp, _ := requestToServer(url, app, chromeUA, acceptWebP)
+	defer resp.Body.Close()
+	WorkerPool.StopAndWait()
+
+	resp, data := requestToServer(url, app, chromeUA, acceptWebP)
+	defer resp.Body.Close()
+	assert.Equal(t, http.StatusOK, resp.StatusCode)
+	assert.Equal(t, "image/webp", getFileContentType(data))
+
+	// test proxyMode with Safari
+	resp, data = requestToServer(url, app, safariUA, acceptLegacy)
+	defer resp.Body.Close()
+	assert.Equal(t, http.StatusOK, resp.StatusCode)
+	assert.Equal(t, "image/jpeg", getFileContentType(data))
+}
+
 func TestConvertBigger(t *testing.T) {
 	proxyMode = false
 	config.Quality = 100
@@ -240,6 +367,31 @@ func TestConvertBigger(t *testing.T) {
 	app.Get("/*", convert)
 
 	url := "http://127.0.0.1:3333/big.jpg"
+	resp, data := requestToServer(url, app, chromeUA, acceptWebP)
+	defer resp.Body.Close()
+	assert.Equal(t, "image/jpeg", resp.Header.Get("content-type"))
+	assert.Equal(t, "image/jpeg", getFileContentType(data))
+	_ = os.RemoveAll(config.ExhaustPath)
+}
+
+func TestConvertBiggerLazy(t *testing.T) {
+	ts := LazyModeSetup(t)
+	t.Cleanup(ts)
+
+	proxyMode = false
+	config.Quality = 100
+	config.ImgPath = "./pics"
+
+	var app = fiber.New()
+	app.Get("/*", convert)
+
+	url := "http://127.0.0.1:3333/big.jpg"
+
+	// Warm up
+	resp, _ := requestToServer(url, app, chromeUA, acceptWebP)
+	defer resp.Body.Close()
+	WorkerPool.StopAndWait()
+
 	resp, data := requestToServer(url, app, chromeUA, acceptWebP)
 	defer resp.Body.Close()
 	assert.Equal(t, "image/jpeg", resp.Header.Get("content-type"))

@@ -3,15 +3,37 @@ package main
 import (
 	"github.com/davidbyttow/govips/v2/vips"
 	"github.com/stretchr/testify/assert"
+	"github.com/h2non/filetype"
 
 	"os"
 	"path"
 	"path/filepath"
 	"strings"
 	"testing"
+	"bytes"
 )
 
 var dest = "/tmp/test-result"
+
+func avifMatcher(buf []byte) bool {
+	// 0000001c 66747970 61766966 00000000 61766966 6d696631 6d696166
+	return len(buf) > 1 && bytes.Equal(buf[:28], []byte{
+		0x0, 0x0, 0x0, 0x1c,
+		0x66, 0x74, 0x79, 0x70,
+		0x61, 0x76, 0x69, 0x66,
+		0x0, 0x0, 0x0, 0x0,
+		0x61, 0x76, 0x69, 0x66,
+		0x6d, 0x69, 0x66, 0x31,
+		0x6d, 0x69, 0x61, 0x66,
+	})
+}
+func getFileContentType(buffer []byte) string {
+	// TODO deprecated.
+	var avifType = filetype.NewType("avif", "image/avif")
+	filetype.AddMatcher(avifType, avifMatcher)
+	kind, _ := filetype.Match(buffer)
+	return kind.MIME.Value
+}
 
 func walker() []string {
 	var list []string

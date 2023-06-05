@@ -14,10 +14,33 @@ import (
 	"github.com/gofiber/fiber/v2/middleware/etag"
 	"github.com/gofiber/fiber/v2/middleware/logger"
 	"github.com/patrickmn/go-cache"
+
+	pq "github.com/emirpasic/gods/queues/priorityqueue"
+	"github.com/emirpasic/gods/utils"
+	pond "github.com/alitto/pond"
+
 	log "github.com/sirupsen/logrus"
 )
 
 var WriteLock *cache.Cache
+var WorkerPool *pond.WorkerPool
+
+// Element is an entry in the priority queue
+type Element struct {
+    itype    string
+	raw string
+	optimized string
+	quality int
+	extraParams ExtraParams
+    priority int
+}
+
+// Comparator function (sort by element's priority value in descending order)
+func byPriority(a, b interface{}) int {
+    priorityA := a.(Element).priority
+    priorityB := b.(Element).priority
+    return -utils.IntComparator(priorityA, priorityB) // "-" descending order
+}
 
 func loadConfig(path string) Config {
 	jsonObject, err := os.Open(path)
@@ -108,6 +131,13 @@ Develop by WebP Server team. https://github.com/webp-sh`, version)
 	})
 	defer vips.Shutdown()
 
+	WorkQueue = pq.NewWith(byPriority) // empty
+
+	// Create a buffered (non-blocking) pool that can scale up to runtime.NumCPU() workers
+	// and has a buffer capacity of 1000 tasks
+	WorkerPool = pond.New(runtime.NumCPU(), 1000)
+	defer WorkerPool.StopAndWait()
+	
 	WriteLock = cache.New(5*time.Minute, 10*time.Minute)
 
 	if prefetch {

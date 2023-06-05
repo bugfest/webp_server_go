@@ -11,6 +11,7 @@ type Config struct {
 	ExhaustPath       string   `json:"EXHAUST_PATH"`
 	EnableAVIF        bool     `json:"ENABLE_AVIF"`
 	EnableExtraParams bool     `json:"ENABLE_EXTRA_PARAMS"`
+	LazyMode          bool     `json:"LAZY_MODE"`
 }
 
 type ExtraParams struct {
@@ -44,7 +45,8 @@ const (
   "EXHAUST_PATH": "./exhaust",
   "ALLOWED_TYPES": ["jpg","png","jpeg","bmp"],
   "ENABLE_AVIF": false,
-  "ENABLE_EXTRA_PARAMS": false
+  "ENABLE_EXTRA_PARAMS": false,
+  "LAZY_MODE": false,
 }`
 
 	sampleSystemd = `

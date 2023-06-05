@@ -10,7 +10,11 @@ import (
 
 	"github.com/davidbyttow/govips/v2/vips"
 	log "github.com/sirupsen/logrus"
+
+	pq "github.com/emirpasic/gods/queues/priorityqueue"
 )
+
+var WorkQueue *pq.Queue
 
 func resizeImage(img *vips.ImageRef, extraParams ExtraParams) error {
 	imgHeightWidthRatio := float32(img.Metadata().Height) / float32(img.Metadata().Width)
@@ -93,11 +97,35 @@ func convertImage(raw, optimized, itype string, extraParams ExtraParams) error {
 		log.Error(err.Error())
 	}
 
-	switch itype {
-	case "webp":
-		err = webpEncoder(raw, optimized, config.Quality, extraParams)
-	case "avif":
-		err = avifEncoder(raw, optimized, config.Quality, extraParams)
+	if !config.LazyMode {
+		switch itype {
+			case "webp":
+				err = webpEncoder(raw, optimized, config.Quality, extraParams)
+			case "avif":
+				err = avifEncoder(raw, optimized, config.Quality, extraParams)
+		}
+	} else {
+		WorkQueue.Enqueue(
+			Element{
+				priority:    1,
+				itype:       itype,
+				raw:         raw,
+				optimized:   optimized,
+				quality:     config.Quality,
+				extraParams: extraParams,
+			},
+		)
+
+		WorkerPool.Submit(func() {
+			ti, _ := WorkQueue.Dequeue()
+			t := ti.(Element)
+			switch t.itype {
+				case "webp":
+					_ = webpEncoder(t.raw, t.optimized, t.quality, t.extraParams)
+				case "avif":
+					_ = avifEncoder(t.raw, t.optimized, t.quality, t.extraParams)
+				}
+		})
 	}
 	return err
 }
