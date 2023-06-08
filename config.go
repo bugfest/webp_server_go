@@ -11,7 +11,6 @@ type Config struct {
 	ExhaustPath       string   `json:"EXHAUST_PATH"`
 	EnableAVIF        bool     `json:"ENABLE_AVIF"`
 	EnableExtraParams bool     `json:"ENABLE_EXTRA_PARAMS"`
-	LazyMode          bool     `json:"LAZY_MODE"`
 }
 
 type ExtraParams struct {
@@ -27,6 +26,9 @@ func (e *ExtraParams) String() string {
 var (
 	configPath               string
 	jobs                     int
+	maxDefaultJobs           int
+	maxHeavyJobs             int
+	lazyMode                 bool
 	dumpConfig, dumpSystemd  bool
 	verboseMode, showVersion bool
 	prefetch, proxyMode      bool
@@ -65,6 +67,8 @@ RestartSec=3s
 
 [Install]
 WantedBy=multi-user.target`
+
+	lazyTickerPeriod = 5
 )
 
 const (

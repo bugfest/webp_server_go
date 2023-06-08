@@ -12,9 +12,24 @@ import (
 	log "github.com/sirupsen/logrus"
 
 	pq "github.com/emirpasic/gods/queues/priorityqueue"
+	hs "github.com/emirpasic/gods/sets/hashset"
 )
 
-var WorkQueue *pq.Queue
+var DefaultWorkQueue *pq.Queue // Queue of pending image convertions
+var HeavyWorkQueue *pq.Queue   // Queue of pending image heavy convertions (e.g. Avif)
+var WorkOngoingSet *hs.Set     // Tracks the ongoing work to avoid queue duplicate convertions
+
+var FormatPriority = map[string]int{
+	"webp": 10,
+	"avif": 1,
+}
+
+func getFormatPriority(format string) int {
+	if priority, found := FormatPriority[format]; found {
+		return priority
+	}
+	return 0
+}
 
 func resizeImage(img *vips.ImageRef, extraParams ExtraParams) error {
 	imgHeightWidthRatio := float32(img.Metadata().Height) / float32(img.Metadata().Width)
@@ -97,37 +112,75 @@ func convertImage(raw, optimized, itype string, extraParams ExtraParams) error {
 		log.Error(err.Error())
 	}
 
-	if !config.LazyMode {
+	if !lazyMode {
+		// Default mode: sync converts
 		switch itype {
-			case "webp":
-				err = webpEncoder(raw, optimized, config.Quality, extraParams)
-			case "avif":
-				err = avifEncoder(raw, optimized, config.Quality, extraParams)
+		case "webp":
+			err = webpEncoder(raw, optimized, config.Quality, extraParams)
+		case "avif":
+			err = avifEncoder(raw, optimized, config.Quality, extraParams)
 		}
 	} else {
-		WorkQueue.Enqueue(
-			Element{
-				priority:    1,
-				itype:       itype,
-				raw:         raw,
-				optimized:   optimized,
-				quality:     config.Quality,
-				extraParams: extraParams,
-			},
-		)
+		// Lazy mode: async converts
+		workElement := Element{
+			priority:    getFormatPriority(itype),
+			itype:       itype,
+			raw:         raw,
+			optimized:   optimized,
+			quality:     config.Quality,
+			extraParams: extraParams,
+		}
 
-		WorkerPool.Submit(func() {
-			ti, _ := WorkQueue.Dequeue()
-			t := ti.(Element)
-			switch t.itype {
-				case "webp":
-					_ = webpEncoder(t.raw, t.optimized, t.quality, t.extraParams)
-				case "avif":
-					_ = avifEncoder(t.raw, t.optimized, t.quality, t.extraParams)
-				}
-		})
+		var WorkQueue *pq.Queue
+		switch itype {
+		case "webp":
+			WorkQueue = DefaultWorkQueue
+		case "avif":
+			WorkQueue = HeavyWorkQueue
+		default:
+			WorkQueue = DefaultWorkQueue
+		}
+
+		it := WorkQueue.Iterator()
+		for it.Next() {
+			if it.Value() == workElement {
+				log.Debugf("Skipping: already in the work queue: %v", workElement)
+				return nil
+			}
+		}
+		if WorkOngoingSet.Contains(workElement) {
+			log.Debugf("Skipping: another conversion already in progress: %v", workElement)
+			return nil
+		}
+		WorkQueue.Enqueue(workElement)
 	}
 	return err
+}
+
+func convertDefaultWork() {
+	convertWork("default", DefaultWorkQueue)
+}
+
+func convertHeavyWork() {
+	convertWork("heavy", HeavyWorkQueue)
+}
+
+func convertWork(name string, wq *pq.Queue) {
+	log.Debugf("Queue:%s size:%d ongoing:%d", name, wq.Size(), WorkOngoingSet.Size())
+	// TODO: use mutex?
+	ti, ok := wq.Dequeue()
+	if !ok {
+		return
+	}
+	t := ti.(Element)
+	WorkOngoingSet.Add(t)
+	switch t.itype {
+	case "webp":
+		_ = webpEncoder(t.raw, t.optimized, t.quality, t.extraParams)
+	case "avif":
+		_ = avifEncoder(t.raw, t.optimized, t.quality, t.extraParams)
+	}
+	WorkOngoingSet.Remove(t)
 }
 
 func avifEncoder(p1, p2 string, quality int, extraParams ExtraParams) error {

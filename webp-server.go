@@ -16,30 +16,35 @@ import (
 	"github.com/patrickmn/go-cache"
 
 	pq "github.com/emirpasic/gods/queues/priorityqueue"
+	hs "github.com/emirpasic/gods/sets/hashset"
 	"github.com/emirpasic/gods/utils"
 	pond "github.com/alitto/pond"
+	"github.com/go-co-op/gocron"
 
 	log "github.com/sirupsen/logrus"
 )
 
 var WriteLock *cache.Cache
-var WorkerPool *pond.WorkerPool
+var DefaultWorkerPool *pond.WorkerPool // Default worker pool
+var HeavyWorkerPool *pond.WorkerPool   // Worker pool for heavy/long convertions (e.g. Avif)
+var VipsConfig *vips.Config
+var Beat *gocron.Scheduler
 
 // Element is an entry in the priority queue
 type Element struct {
-    itype    string
-	raw string
-	optimized string
-	quality int
+	itype       string
+	raw         string
+	optimized   string
+	quality     int
 	extraParams ExtraParams
-    priority int
+	priority    int
 }
 
 // Comparator function (sort by element's priority value in descending order)
 func byPriority(a, b interface{}) int {
-    priorityA := a.(Element).priority
-    priorityB := b.(Element).priority
-    return -utils.IntComparator(priorityA, priorityB) // "-" descending order
+	priorityA := a.(Element).priority
+	priorityB := b.(Element).priority
+	return -utils.IntComparator(priorityA, priorityB) // "-" descending order
 }
 
 func loadConfig(path string) Config {
@@ -54,14 +59,23 @@ func loadConfig(path string) Config {
 }
 
 func deferInit() {
-	flag.StringVar(&configPath, "config", "config.json", "/path/to/config.json. (Default: ./config.json)")
-	flag.BoolVar(&prefetch, "prefetch", false, "Prefetch and convert image to webp")
-	flag.IntVar(&jobs, "jobs", runtime.NumCPU(), "Prefetch thread, default is all.")
-	flag.BoolVar(&dumpConfig, "dump-config", false, "Print sample config.json")
-	flag.BoolVar(&dumpSystemd, "dump-systemd", false, "Print sample systemd service file.")
-	flag.BoolVar(&verboseMode, "v", false, "Verbose, print out debug info.")
-	flag.BoolVar(&showVersion, "V", false, "Show version information.")
-	flag.Parse()
+	// Use a flagSet to avoid issues during TestMain* tests
+	configflag := flag.NewFlagSet("main", flag.ContinueOnError)
+	configflag.StringVar(&configPath, "config", "config.json", "/path/to/config.json. (Default: ./config.json)")
+	configflag.BoolVar(&prefetch, "prefetch", false, "Prefetch and convert image to webp")
+	configflag.IntVar(&jobs, "jobs", runtime.NumCPU(), "Prefetch thread, default is all.")
+	configflag.BoolVar(&lazyMode, "lazy", false, "Convert images in the background, asynchronously")
+	configflag.IntVar(&maxDefaultJobs, "lazy-jobs", runtime.NumCPU(), "Max parallel tasks (WebP) in lazy mode, default is all.")
+	configflag.IntVar(&maxHeavyJobs, "lazy-heavy-jobs", runtime.NumCPU(), "Max parallel heavy tasks (AVIF) in lazy mode, default is all.")
+	configflag.BoolVar(&dumpConfig, "dump-config", false, "Print sample config.json")
+	configflag.BoolVar(&dumpSystemd, "dump-systemd", false, "Print sample systemd service file.")
+	configflag.BoolVar(&verboseMode, "v", false, "Verbose, print out debug info.")
+	configflag.BoolVar(&showVersion, "V", false, "Show version information.")
+	err := configflag.Parse(os.Args[1:])
+	if err != nil {
+		log.Error(err)
+	}
+
 	// Logrus
 	log.SetOutput(os.Stdout)
 	log.SetReportCaller(true)
@@ -126,18 +140,38 @@ Develop by WebP Server team. https://github.com/webp-sh`, version)
 	config = loadConfig(configPath)
 	switchProxyMode()
 
-	vips.Startup(&vips.Config{
+	VipsConfig = &vips.Config{
 		ConcurrencyLevel: runtime.NumCPU(),
-	})
+		MaxCacheFiles:    1,
+	}
+
+	vips.Startup(VipsConfig)
 	defer vips.Shutdown()
 
-	WorkQueue = pq.NewWith(byPriority) // empty
+	if lazyMode {
+		log.Info("Lazy mode enabled!")
+		DefaultWorkQueue = pq.NewWith(byPriority) // Default tasks queue
+		HeavyWorkQueue = pq.NewWith(byPriority)   // Heavy tasks queue
+		WorkOngoingSet = hs.New()                 // In-flight operations
 
-	// Create a buffered (non-blocking) pool that can scale up to runtime.NumCPU() workers
-	// and has a buffer capacity of 1000 tasks
-	WorkerPool = pond.New(runtime.NumCPU(), 1000)
-	defer WorkerPool.StopAndWait()
-	
+		// Create a buffered (non-blocking) pool that can scale up to runtime.NumCPU() workers
+		// and has a buffer capacity of 1000 tasks
+		DefaultWorkerPool = pond.New(runtime.NumCPU(), 1000)
+		defer DefaultWorkerPool.StopAndWait()
+
+		// Heavy tasks are the most resource intensive ones (e.g. Avif)
+		HeavyWorkerPool = pond.New(maxHeavyJobs, 1000)
+		defer HeavyWorkerPool.StopAndWait()
+
+		Beat = gocron.NewScheduler(time.UTC)
+		Beat.SetMaxConcurrentJobs(1, gocron.RescheduleMode)
+		_, _ = Beat.Every(lazyTickerPeriod).Seconds().Do(func() {
+			lazyDo()
+		})
+		Beat.StartAsync()
+		defer Beat.Stop()
+	}
+
 	WriteLock = cache.New(5*time.Minute, 10*time.Minute)
 
 	if prefetch {
@@ -160,5 +194,14 @@ Develop by WebP Server team. https://github.com/webp-sh`, version)
 	fmt.Println("Webp Server Go is Running on http://" + listenAddress)
 
 	_ = app.Listen(listenAddress)
+}
 
+// Create jobs from the pools 
+func lazyDo() {
+	for i := 0; i < DefaultWorkQueue.Size(); i++ {
+		DefaultWorkerPool.Submit(convertDefaultWork)
+	}
+	for i := 0; i < HeavyWorkQueue.Size(); i++ {
+		HeavyWorkerPool.Submit(convertHeavyWork)
+	}
 }

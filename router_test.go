@@ -28,7 +28,7 @@ func TestMain(m *testing.M) {
 	config.ImgPath = "./pics"
 	config.ExhaustPath = "./exhaust_test"
 	config.AllowedTypes = []string{"jpg", "png", "jpeg", "bmp"}
-	config.LazyMode = false
+	lazyMode = false
 
 	proxyMode = false
 	remoteRaw = "remote-raw"
@@ -60,8 +60,6 @@ func TestServerHeaders(t *testing.T) {
 	ts := LazyModeSetup(t)
 	t.Cleanup(ts)
 
-	defer WorkerPool.StopAndWait()
-
 	var app = fiber.New()
 	app.Use(etag.New(etag.Config{
 		Weak: true,
@@ -72,7 +70,8 @@ func TestServerHeaders(t *testing.T) {
 	// warm up
 	resp, _ := requestToServer(url, app, chromeUA, acceptWebP)
 	defer resp.Body.Close()
-	WorkerPool.StopAndWait()
+	DefaultWorkerPool.StopAndWait()
+	HeavyWorkerPool.StopAndWait()
 
 	// test for chrome
 	response, _ := requestToServer(url, app, chromeUA, acceptWebP)
@@ -240,7 +239,8 @@ func TestConvertLazy(t *testing.T) {
 		resp, _ := requestToServer(url, app, chromeUA, acceptWebP)
 		defer resp.Body.Close()
 	}
-	WorkerPool.StopAndWait()
+	DefaultWorkerPool.StopAndWait()
+	HeavyWorkerPool.StopAndWait()
 
 	// test Chrome
 	for url, respType := range testChromeLink {
@@ -331,7 +331,7 @@ func TestConvertProxyModeWorkLazy(t *testing.T) {
 	ts := LazyModeSetup(t)
 	t.Cleanup(ts)
 
-	assert.Equal(t, true, config.LazyMode)
+	assert.Equal(t, true, lazyMode)
 
 	proxyMode = true
 
@@ -344,7 +344,8 @@ func TestConvertProxyModeWorkLazy(t *testing.T) {
 	// Warm up
 	resp, _ := requestToServer(url, app, chromeUA, acceptWebP)
 	defer resp.Body.Close()
-	WorkerPool.StopAndWait()
+	DefaultWorkerPool.StopAndWait()
+	HeavyWorkerPool.StopAndWait()
 
 	resp, data := requestToServer(url, app, chromeUA, acceptWebP)
 	defer resp.Body.Close()
@@ -390,7 +391,8 @@ func TestConvertBiggerLazy(t *testing.T) {
 	// Warm up
 	resp, _ := requestToServer(url, app, chromeUA, acceptWebP)
 	defer resp.Body.Close()
-	WorkerPool.StopAndWait()
+	DefaultWorkerPool.StopAndWait()
+	HeavyWorkerPool.StopAndWait()
 
 	resp, data := requestToServer(url, app, chromeUA, acceptWebP)
 	defer resp.Body.Close()

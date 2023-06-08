@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"path"
 	"time"
+	"runtime"
 
 	log "github.com/sirupsen/logrus"
 	"github.com/valyala/fasthttp"
@@ -14,11 +15,36 @@ import (
 	"sort"
 	"testing"
 
+	pond "github.com/alitto/pond"
+	pq "github.com/emirpasic/gods/queues/priorityqueue"
+	hs "github.com/emirpasic/gods/sets/hashset"
+
 	"github.com/stretchr/testify/assert"
 )
 
 // test all files: go test -v -cover .
 // test one case: go test -v -run TestSelectFormat
+
+func LazyModeSetup(t *testing.T) func() {
+	// Setup
+	lazyMode = true
+	DefaultWorkQueue = pq.NewWith(byPriority) // empty
+	HeavyWorkQueue = pq.NewWith(byPriority) // empty
+	WorkOngoingSet = hs.New()
+
+	// Create a buffered (non-blocking) pool that can scale up to runtime.NumCPU() workers
+	// and has a buffer capacity of 1000 tasks
+	DefaultWorkerPool = pond.New(runtime.NumCPU(), 1000)
+	HeavyWorkerPool = pond.New(maxHeavyJobs, 1000)
+
+	return func() {
+		// Tear down
+		lazyMode = false
+		DefaultWorkerPool.StopAndWaitFor(15*time.Second)
+		HeavyWorkerPool.StopAndWaitFor(15*time.Second)
+		WorkOngoingSet.Clear()
+    }
+}
 
 func TestGetFileContentType(t *testing.T) {
 	var data = []byte("remember remember the 5th of november")
