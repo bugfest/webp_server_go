@@ -145,8 +145,8 @@ func proxyHandler(c *fiber.Ctx, reqURIwithQuery string, reqHostname string) (str
 	statusCode, etagValue, _ := getRemoteImageInfo(realRemoteAddr)
 
 	// Since we cannot store file in format of "/mypic/123.jpg?someother=200&somebugs=200", we need to hash it.
-	reqURIwithQueryHash := Sha1Path(reqURIwithQuery) // 378e740ca56144b7587f3af9debeee544842879a
-	etagValueHash := Sha1Path(etagValue)             // 123e740ca56333b7587f3af9debeee5448428123
+	reqURIwithQueryHash := HashPath(reqURIwithQuery) // 378e740ca56144b7587f3af9debeee544842879a
+	etagValueHash := HashPath(etagValue)             // 123e740ca56333b7587f3af9debeee5448428123
 
 	localRawImagePath := path.Join(remoteRaw, reqURIwithQueryHash+"-etag-"+etagValueHash) // For store the remote raw image, /home/webp_server/remote-raw/378e740ca56144b7587f3af9debeee544842879a-etag-123e740ca56333b7587f3af9debeee5448428123
 

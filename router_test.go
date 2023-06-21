@@ -23,7 +23,8 @@ var (
 	curlUA       = "curl/7.64.1"
 )
 
-func TestMain(m *testing.M) {
+
+func setupParam() {
 	// setup parameters here...
 	config.ImgPath = "./pics"
 	config.ExhaustPath = "./exhaust_test"
@@ -31,10 +32,15 @@ func TestMain(m *testing.M) {
 
 	proxyMode = false
 	remoteRaw = "remote-raw"
-	WriteLock = cache.New(5*time.Minute, 10*time.Minute)
-	m.Run()
+
 
 	config.Proxy.Enable = false
+}
+
+func TestMain(m *testing.M) {
+	setupParam()
+	WriteLock = cache.New(5*time.Minute, 10*time.Minute)
+	m.Run()
 }
 
 func setupParamProxy(BackendURL string) {
